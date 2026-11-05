@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emergency Response: The Drill</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ============ LAYOUT CONCEPT ============
+   A job-site "drill card" clipped to a progress rail of 25 stations grouped
+   into 4 shifts (parts of the chapter). One station fills the screen at a
+   time; the rail shows where the crew is in the rotation.
+*/
+:root{
+  --bg:#F4F6F8; --bg-raised:#FFFFFF; --ink:#142230; --ink-dim:#5B6B7A;
+  --line:#D8DFE6; --accent:#E8590C; --accent-ink:#FFFFFF;
+  --accent-2:#2E6E8E; --good:#1F7A5C; --good-bg:#E4F3EC;
+  --bad:#C2410C; --bad-bg:#FBE9E1; --amber:#C77D00; --amber-bg:#FCF0DC;
+  --navy:#13263B; --navy-2:#1C3650; --chip:#EEF2F6;
+  --font-display:'Barlow Condensed',system-ui,sans-serif;
+  --font-body:'Work Sans',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1A26; --bg-raised:#182836; --ink:#EDF2F6; --ink-dim:#A7B6C4;
+    --line:#2B3E4F; --accent:#FF7A33; --accent-ink:#13171A;
+    --accent-2:#6FB6DA; --good:#4FCF9A; --good-bg:#15332A;
+    --bad:#FF8A5C; --bad-bg:#3A2017; --amber:#FFC24B; --amber-bg:#3A2E10;
+    --navy:#0B1622; --navy-2:#13263B; --chip:#1E3042; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1A26; --bg-raised:#182836; --ink:#EDF2F6; --ink-dim:#A7B6C4;
+  --line:#2B3E4F; --accent:#FF7A33; --accent-ink:#13171A;
+  --accent-2:#6FB6DA; --good:#4FCF9A; --good-bg:#15332A;
+  --bad:#FF8A5C; --bad-bg:#3A2017; --amber:#FFC24B; --amber-bg:#3A2E10;
+  --navy:#0B1622; --navy-2:#13263B; --chip:#1E3042; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+  min-height:100%;
+}
+html,body{height:100%}
+h1,h2,h3{font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0}
+.mono{font-family:var(--font-mono)}
+.wrap{max-width:860px; margin:0 auto; padding-block:18px 100px}
+
+/* top bar */
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:10;
+  background:var(--bg); padding-block:10px 8px; margin-inline:-16px; padding-inline:max(16px, env(safe-area-inset-left,0px)) max(16px, env(safe-area-inset-right,0px));
+  border-bottom:1px solid var(--line);
+}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.topbar-row{display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:860px; margin:0 auto;}
+.brand{display:flex; flex-direction:column; line-height:1.1}
+.brand .eyebrow{font-family:var(--font-display); font-size:11px; letter-spacing:.14em; color:var(--accent); text-transform:uppercase; font-weight:600}
+.brand .name{font-family:var(--font-display); font-size:19px; font-weight:700}
+.score-pill{
+  font-family:var(--font-mono); font-size:12.5px; font-weight:700; color:var(--ink);
+  background:var(--chip); border:1px solid var(--line); border-radius:999px; padding:6px 12px;
+  display:flex; align-items:center; gap:6px; white-space:nowrap;
+}
+.score-pill .dot{width:7px; height:7px; border-radius:50%; background:var(--accent)}
+
+/* rail */
+.rail{max-width:860px; margin:10px auto 0; display:flex; gap:3px; overflow-x:auto; padding-bottom:4px; scrollbar-width:thin}
+.rail::-webkit-scrollbar{height:4px}
+.tick{
+  flex:1 0 14px; height:7px; border-radius:3px; background:var(--line); border:none; padding:0; cursor:pointer;
+  min-width:10px; transition:transform .15s;
+}
+.tick:hover{transform:scaleY(1.4)}
+.tick[data-part="1"]{--pc:var(--accent-2)}
+.tick[data-part="2"]{--pc:var(--accent)}
+.tick[data-part="3"]{--pc:var(--good)}
+.tick[data-part="4"]{--pc:#9568C9}
+.tick.visited{background:var(--pc)}
+.tick.current{background:var(--ink); height:9px}
+
+/* card */
+.card{
+  background:var(--bg-raised); border:1px solid var(--line); border-radius:14px;
+  padding:26px 24px 24px; margin-top:18px;
+}
+.kicker{font-family:var(--font-display); font-size:12.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:6px}
+.stationno{color:var(--ink-dim); font-family:var(--font-mono); font-size:12px}
+h2.title{font-size:clamp(24px,5vw,32px); margin-bottom:14px}
+.body-text{font-size:15.5px; line-height:1.6; color:var(--ink)}
+.body-text + .body-text{margin-top:10px}
+.body-text b{color:var(--ink)}
+.callout{
+  background:var(--chip); border-left:3px solid var(--accent-2); border-radius:0 8px 8px 0;
+  padding:10px 14px; font-size:14px; color:var(--ink-dim); margin-top:14px;
+}
+.statline{font-family:var(--font-mono); font-size:13px; color:var(--accent-2); background:var(--chip); display:inline-block; padding:3px 9px; border-radius:6px; margin-top:8px}
+
+/* interactive widgets shared */
+.widget{margin-top:18px}
+.prompt{font-weight:600; font-size:15.5px; margin-bottom:12px}
+.opt-list{display:flex; flex-direction:column; gap:8px}
+.opt{
+  display:flex; align-items:flex-start; gap:10px; text-align:left; width:100%;
+  background:var(--bg); border:1.5px solid var(--line); border-radius:10px; padding:11px 14px;
+  font-family:var(--font-body); font-size:14.5px; color:var(--ink); cursor:pointer; transition:.12s border-color,.12s background;
+}
+.opt:hover{border-color:var(--accent-2)}
+.opt .box{flex:0 0 auto; width:18px; height:18px; border-radius:5px; border:1.5px solid var(--line); margin-top:1px; display:flex; align-items:center; justify-content:center; font-size:11px}
+.opt.radio .box{border-radius:50%}
+.opt.correct{border-color:var(--good); background:var(--good-bg)}
+.opt.correct .box{background:var(--good); border-color:var(--good); color:#fff}
+.opt.incorrect{border-color:var(--bad); background:var(--bad-bg)}
+.opt.incorrect .box{background:var(--bad); border-color:var(--bad); color:#fff}
+.opt:disabled, .opt.locked{cursor:default}
+.feedback{margin-top:12px; padding:11px 14px; border-radius:10px; font-size:14px; line-height:1.5; display:none}
+.feedback.show{display:block}
+.feedback.good{background:var(--good-bg); color:var(--good)}
+.feedback.bad{background:var(--bad-bg); color:var(--bad)}
+.feedback b{color:inherit}
+
+/* match widget */
+.match-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+@media (max-width:480px){.match-grid{grid-template-columns:1fr}}
+.match-col-label{font-family:var(--font-display); font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:8px}
+.match-item{
+  width:100%; text-align:left; background:var(--bg); border:1.5px solid var(--line); border-radius:9px;
+  padding:10px 12px; font-size:14px; margin-bottom:8px; cursor:pointer; color:var(--ink);
+}
+.match-item.sel{border-color:var(--accent); background:var(--chip)}
+.match-item.paired{border-color:var(--good); background:var(--good-bg); cursor:default; opacity:.85}
+.match-item.wrong-flash{border-color:var(--bad); background:var(--bad-bg)}
+
+/* sort widget */
+.sort-pool{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; min-height:40px}
+.sort-chip{
+  background:var(--chip); border:1.5px solid var(--line); border-radius:999px; padding:7px 13px;
+  font-size:13.5px; cursor:pointer; color:var(--ink);
+}
+.sort-chip.gone{opacity:0; pointer-events:none}
+.sort-buckets{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+@media (max-width:480px){.sort-buckets{grid-template-columns:1fr}}
+.bucket{border:1.5px dashed var(--line); border-radius:10px; padding:10px; min-height:90px}
+.bucket-label{font-family:var(--font-display); font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:8px}
+.bucket .placed{display:inline-block; background:var(--bg-raised); border:1px solid var(--line); border-radius:999px; padding:5px 11px; font-size:13px; margin:0 4px 4px 0}
+.bucket .placed.right{border-color:var(--good); background:var(--good-bg); color:var(--good)}
+.bucket .placed.wrong{border-color:var(--bad); background:var(--bad-bg); color:var(--bad)}
+
+/* sequence widget */
+.seq-list{display:flex; flex-direction:column; gap:8px}
+.seq-item{
+  display:flex; align-items:center; gap:12px; background:var(--bg); border:1.5px solid var(--line);
+  border-radius:10px; padding:10px 12px; font-size:14.5px;
+}
+.seq-num{font-family:var(--font-mono); font-weight:700; color:var(--accent); min-width:20px}
+.seq-btns{display:flex; gap:4px; margin-left:auto}
+.seq-btns button{
+  width:26px; height:26px; border-radius:6px; border:1px solid var(--line); background:var(--bg-raised);
+  color:var(--ink); cursor:pointer; font-size:13px; line-height:1;
+}
+.seq-btns button:disabled{opacity:.3; cursor:default}
+
+/* quiz final */
+.qf-item{border-top:1px solid var(--line); padding-top:16px; margin-top:16px}
+.qf-item:first-child{border-top:none; padding-top:0; margin-top:0}
+.qf-score-ring{
+  width:96px;height:96px;border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background:conic-gradient(var(--accent) calc(var(--pct,0)*1%), var(--line) 0); margin:0 auto 14px;
+}
+.qf-score-ring span{
+  width:76px;height:76px;border-radius:50%; background:var(--bg-raised); display:flex; flex-direction:column;
+  align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:20px;
+}
+.qf-score-ring span small{font-size:10px; font-weight:500; color:var(--ink-dim); font-family:var(--font-body)}
+
+/* checklist self-assess */
+.chk-row{display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line)}
+.chk-row:last-child{border-bottom:none}
+.chk-box{flex:0 0 auto; width:19px;height:19px;border-radius:5px;border:1.5px solid var(--line); margin-top:2px; cursor:pointer; display:flex;align-items:center;justify-content:center; font-size:12px; background:var(--bg)}
+.chk-box.on{background:var(--good); border-color:var(--good); color:#fff}
+
+/* nav */
+.navbar{
+  position:fixed; left:0; right:0; bottom:0; z-index:9; background:var(--bg-raised); border-top:1px solid var(--line);
+  padding:10px max(16px, env(safe-area-inset-right,0px)) max(10px, env(safe-area-inset-bottom,0px)) max(16px, env(safe-area-inset-left,0px));
+}
+.navbar-row{max-width:860px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:10px}
+.nbtn{
+  font-family:var(--font-display); font-weight:600; font-size:15px; letter-spacing:.02em;
+  border-radius:9px; padding:10px 18px; cursor:pointer; border:1.5px solid var(--line); background:var(--bg);
+  color:var(--ink); display:flex; align-items:center; gap:6px;
+}
+.nbtn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.nbtn:disabled{opacity:.35; cursor:default}
+.nav-mid{font-family:var(--font-mono); font-size:12.5px; color:var(--ink-dim); white-space:nowrap}
+
+/* start / end screens */
+.hero{text-align:center; padding:28px 8px 8px}
+.hero .tag{font-family:var(--font-display); font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:600}
+.hero h1{font-size:clamp(30px,8vw,44px); margin:10px 0 12px}
+.hero p{font-size:15.5px; color:var(--ink-dim); max-width:480px; margin:0 auto 20px; line-height:1.55}
+.part-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:22px}
+@media (max-width:560px){.part-grid{grid-template-columns:1fr 1fr}}
+.part-card{background:var(--bg-raised); border:1px solid var(--line); border-radius:12px; padding:14px 12px; text-align:left}
+.part-card .n{font-family:var(--font-mono); color:var(--accent); font-size:12px; font-weight:700}
+.part-card .t{font-family:var(--font-display); font-weight:700; font-size:16px; margin-top:4px}
+.bigstart{
+  font-family:var(--font-display); font-size:17px; font-weight:700; letter-spacing:.02em;
+  background:var(--accent); color:var(--accent-ink); border:none; border-radius:10px; padding:13px 30px; cursor:pointer;
+}
+a.exit-link{color:var(--accent-2)}
+
+/* Name-gate overlay, shown before the first station */
+.namegate{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
+.namegate-card{max-width:420px;width:100%;background:var(--bg-raised);border:1px solid var(--line);border-radius:16px;padding:28px 24px;box-shadow:0 12px 32px rgba(20,34,48,.12)}
+.namegate-card h2{font-family:var(--font-display);font-size:28px;margin:0 0 6px;color:var(--ink)}
+.namegate-card p{font-family:var(--font-body);font-size:14.5px;color:var(--ink-dim);margin:0 0 18px;line-height:1.5}
+.namegate-card label{display:block;font-family:var(--font-body);font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px}
+.namegate-card input{width:100%;box-sizing:border-box;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-family:var(--font-body);font-size:15.5px;color:var(--ink);background:#fff}
+.namegate-card input:focus{outline:none;border-color:var(--accent)}
+.namegate-card .ng-err{color:var(--bad);font-family:var(--font-body);font-size:13px;margin-top:6px;min-height:1.2em}
+.namegate-card button{margin-top:16px;width:100%;padding:13px;border:none;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-family:var(--font-body);font-weight:700;font-size:15.5px;cursor:pointer}
+.namegate-card button:hover{filter:brightness(1.06)}
+.namegate.hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="namegate" id="namegate">
+  <div class="namegate-card">
+    <h2>Before you start</h2>
+    <p>Enter your name so it's there for your own reference as you work through the drill.</p>
+    <label for="ngName">Your name</label>
+    <input type="text" id="ngName" autocomplete="name" placeholder="e.g. Jordan Smith" maxlength="80">
+    <div class="ng-err" id="ngErr"></div>
+    <button id="ngGo">Continue →</button>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-row">
+    <div class="brand"><span class="eyebrow">BCS 3116 · Ch. 10 Interactive</span><span class="name">Emergency Response: The Drill</span></div>
+    <div class="score-pill"><span class="dot"></span><span id="scoreText">0 / 0</span></div>
+  </div>
+  <div class="rail" id="rail"></div>
+</div>
+
+<div class="wrap">
+  <div id="stage"></div>
+</div>
+
+<div class="navbar">
+  <div class="navbar-row">
+    <button class="nbtn" id="btnBack">&larr; Back</button>
+    <span class="nav-mid" id="navMid"></span>
+    <button class="nbtn primary" id="btnNext">Next &rarr;</button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------------------------------------------------------------
+   NAME GATE
+   Purely for the student's own reference (shown back to them on
+   screen) — nothing here is sent anywhere.
+--------------------------------------------------------------- */
+let studentName = "";
+try{ studentName = localStorage.getItem('erd_name') || ""; }catch(e){}
+
+function gateInit(){
+  const gate = document.getElementById('namegate');
+  const input = document.getElementById('ngName');
+  const err = document.getElementById('ngErr');
+  const go = document.getElementById('ngGo');
+  if(studentName){ gate.classList.add('hidden'); return; }
+  input.value = studentName;
+  function submit(){
+    const v = input.value.trim();
+    if(v.length < 2){ err.textContent = 'Please enter your name.'; input.focus(); return; }
+    studentName = v;
+    try{ localStorage.setItem('erd_name', v); }catch(e){}
+    gate.classList.add('hidden');
+  }
+  go.addEventListener('click', submit);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+  input.focus();
+}
+
+/* ---------------------------------------------------------------
+   DATA: 25 stations across 4 "shifts" (parts), 0 = start, 26 = end
+--------------------------------------------------------------- */
+const PARTS = {1:"Preparing & the Law", 2:"OSHA & the EAP", 3:"First Aid Readiness", 4:"Teams, Tech & Trauma"};
+
+const S = []; // stations
+
+S.push({kind:"start"});
+
+/* ---------- PART 1 ---------- */
+S.push({part:1, kicker:"Why Prepare", title:"When Seconds Matter", type:"mcq",
+  body:["An <b>emergency</b> is a potentially life-threatening situation, usually occurring suddenly and unexpectedly, from natural or human causes. Professional emergency crews respond quickly, calmly, and precisely — while bystanders hesitate."],
+  prompt:"What actually produces that calm, fast response?",
+  options:[
+    {t:"Natural instinct under pressure", c:false, x:"Instinct alone isn't reliable — untrained bystanders freeze or panic in the same situation."},
+    {t:"Preparation — planning, practicing, evaluating, adjusting", c:true, x:"Right. Speed in responding can mean the difference between life and death, or between minimal and major damage — and that speed comes from preparation."},
+    {t:"Having the largest possible response team", c:false, x:"Team size matters less than whether the plan has been practiced and everyone knows their role."},
+  ]});
+
+S.push({part:1, kicker:"Figure 10-1", title:"The Readiness Cycle", type:"sequence",
+  body:["Preparation isn't a single step — it's a cycle. Put these four components of emergency response preparation in the order a company would run through them."],
+  items:["Plan","Practice","Evaluate","Adjust"], correctOrder:[0,1,2,3],
+  explain:"Plan the response, practice it (drills), evaluate how the drill went, then adjust the plan — and the cycle repeats."});
+
+S.push({part:1, kicker:"The Law Behind the Plan", title:"EPCRA: Right-to-Know", type:"mcq",
+  body:["Title III of the Superfund Amendments and Reauthorization Act (SARA) — the <b>Emergency Planning and Community Right-to-Know Act (EPCRA)</b> — makes hazardous-chemical information available to the community that lives near it."],
+  prompt:"Who does EPCRA apply to?",
+  options:[
+    {t:"Only companies that manufacture chemicals", c:false, x:"Manufacturing is only one of the covered activities."},
+    {t:"All companies that use, make, transport, or store chemicals", c:true, x:"Correct — EPCRA casts a wide net, which is why construction firms handling fuels, solvents, or coatings are covered too."},
+    {t:"Only companies above a certain employee count", c:false, x:"EPCRA's coverage turns on handling chemicals, not company size."},
+  ]});
+
+S.push({part:1, kicker:"Figure 10-2", title:"Match the Component", type:"match",
+  body:["EPCRA has four components. Match each one to what it actually requires."],
+  pairs:[
+    {l:"Emergency Planning", r:"Communities form LEPCs; states form SERCs to develop and oversee local response plans"},
+    {l:"Emergency Notification", r:"Spills or releases exceeding allowable limits must be reported to LEPCs and SERCs"},
+    {l:"Information Requirements", r:"Companies keep LEPCs, SERCs, and the public informed about hazardous substances on hand"},
+    {l:"Toxic Chemical Release Reporting", r:"Companies report total toxic releases to the environment to the EPA and state agency"},
+  ]});
+
+S.push({part:1, kicker:"Emergency Notification", title:"What Has to Be in the Report?", type:"multi",
+  body:["A chemical spill or toxic release exceeding allowable limits must be reported to the LEPC and SERC — verbally first if needed, in writing promptly after."],
+  prompt:"Select every item the written report must contain.",
+  options:[
+    {t:"The name(s) of the substance(s) released", c:true},
+    {t:"Where and when the release occurred", c:true},
+    {t:"The estimated amount released", c:true},
+    {t:"Known hazards and recommended precautions", c:true},
+    {t:"A contact person at the company", c:true},
+    {t:"The company's insurance policy number", c:false},
+  ],
+  explain:"The report needs substance, location, time, amount, hazards, precautions, and a contact — insurance details aren't part of the EPCRA notification."});
+
+S.push({part:1, kicker:"Organization & Coordination", title:"One Person, One Chain", type:"mcq",
+  body:["Responses draw on medical, firefighting, security, and safety personnel — each with a different, interdependent role. Because backgrounds differ, coordination is critical."],
+  prompt:"Which of these is NOT one of the three coordination essentials from the chapter?",
+  options:[
+    {t:"One person is clearly in charge", c:false, x:"This is essential #1."},
+    {t:"Everyone involved knows who's in charge", c:false, x:"This is essential #2."},
+    {t:"Everyone with a role practices in realistic simulated conditions", c:false, x:"This is essential #3."},
+    {t:"The coordinator must be the highest-ranking executive on site", c:true, x:"Correct — the standard doesn't require the coordinator to be the most senior person, just someone knowledgeable, accepted by all responders, and practiced."},
+  ]});
+
+/* ---------- PART 2 ---------- */
+S.push({part:2, kicker:"29 CFR 1926.35", title:"The EAP Standard", type:"mcq",
+  body:["All OSHA standards exist to promote a safe, accident-free — and hence emergency-free — workplace. 29 CFR 1926.35 requires employee Emergency Action Plans (EAPs)."],
+  prompt:"When can an EAP be purely verbal instead of written?",
+  options:[
+    {t:"Never — all EAPs must be written", c:false, x:"There's one narrow exception."},
+    {t:"When the company has 10 or fewer employees", c:true, x:"Correct — that's the only exception the standard allows."},
+    {t:"When the job site is temporary", c:false, x:"Site duration isn't the test — employee count is."},
+  ]});
+
+S.push({part:2, kicker:"Required Content", title:"Six Elements, Scrambled", type:"match",
+  body:["Every EAP must include six elements. Match the fragment on the left to how it completes the requirement on the right."],
+  pairs:[
+    {l:"Escape procedures", r:"and emergency escape route assignments"},
+    {l:"Critical operations", r:"procedures for employees who stay behind before evacuating"},
+    {l:"Accounting for employees", r:"procedures to confirm everyone is out after evacuation"},
+    {l:"Rescue & medical duties", r:"for the employees assigned to perform them"},
+    {l:"Reporting procedures", r:"preferred procedures for reporting fires and other emergencies"},
+    {l:"Contact information", r:"personnel to reach for anyone needing clarification about the plan"},
+  ]});
+
+S.push({part:2, kicker:"Putting It Into Practice", title:"Sort: Alarm, Evacuation, or Training?", type:"sort",
+  body:["Each requirement below belongs to one of three EAP components. Sort them."],
+  buckets:["Alarm System","Evacuation","Training"],
+  items:[
+    {t:"A distinctive signal is required for each alarm purpose (e.g., fire vs. other emergencies)", b:0},
+    {t:"Must comply with 29 CFR 1926.159", b:0},
+    {t:"Not explicitly required, but companies are well advised to practice it with all employees", b:1},
+    {t:"Procedures must be developed and made known to every employee", b:1},
+    {t:"Employers must designate and train enough workers to assist in orderly evacuation", b:2},
+    {t:"Reviewed initially, when responsibilities change, and whenever the plan changes", b:2},
+  ]});
+
+S.push({part:2, kicker:"Figure 10-3", title:"Build the Checklist", type:"sort",
+  body:["The chapter's emergency planning checklist groups everything a plan should cover into six categories. Sort each example into the category it belongs to."],
+  buckets:["Type of Emergency","Procedures","Coordination","Assignments & Responsibilities","Accident-Prevention","Schedules"],
+  items:[
+    {t:"Chemical spill", b:0},
+    {t:"Controlling and isolating", b:1},
+    {t:"Fire service providers", b:2},
+    {t:"Who conducts the evacuation?", b:3},
+    {t:"Periodic safety inspections", b:4},
+    {t:"Dates of practice drills", b:5},
+  ]});
+
+S.push({part:2, kicker:"Case File", title:"Niles, Illinois", type:"scenario",
+  body:["A company had not trained its employees in safe operating procedures. The result: a devastating explosion. One employee was killed; five were seriously injured."],
+  prompt:"Before you see the citation — what do you think OSHA found at the root of it?",
+  options:[
+    {t:"Faulty equipment the company couldn't have predicted", c:false, x:"OSHA's citation pointed at preventable, trainable failures, not an unforeseeable equipment fault."},
+    {t:"Untrained workers and hazardous material left near open flames/sparks", c:true, x:"That's exactly what OSHA cited. The company was fined $99,000 and had to permanently stop the process that caused the explosion — the cost of skipping training, in one incident."},
+    {t:"A natural disaster that no plan could have prevented", c:false, x:"This was a preventable workplace failure, not a natural event."},
+  ],
+  statline:"OSHA fine: $99,000 · one fatality · five serious injuries"});
+
+S.push({part:2, kicker:"Customizing Plans", title:"Make It Local", type:"match",
+  body:["General plans developed centrally and used at every job site have limited effectiveness. EAPs must be location specific. Match each tool to what it localizes."],
+  pairs:[
+    {l:"A map in the plan", r:"Exits, access points, evacuation routes, alarms, equipment, command center, first aid kits"},
+    {l:"Chain of command", r:"Org chart of who's responsible for what, with a backup for every position"},
+    {l:"Coordination information", r:"Phone numbers and contacts for every agency the company coordinates with"},
+    {l:"Local training", r:"Training geared to the emergencies that could realistically occur at that site"},
+  ]});
+
+/* ---------- PART 3 ---------- */
+S.push({part:3, kicker:"First Aid in Emergencies", title:"The Golden Minutes", type:"mcq",
+  body:["First aid is life-saving measures taken to assist an injured person until medical help arrives — CPR, stopping bleeding at a pressure point, the Heimlich maneuver."],
+  prompt:"According to the chapter, how long before delay in administering first aid could cost a life?",
+  options:[
+    {t:"1–2 minutes", c:false},
+    {t:"4–6 minutes", c:true, x:"Right — that's the window cited for CPR, severe bleeding, and choking."},
+    {t:"15–20 minutes", c:false},
+  ]});
+
+S.push({part:3, kicker:"Figure 10-4", title:"Self-Check: Course Topics", type:"checklist",
+  body:["A construction first aid class typically covers the topics below. Click each one you could already explain to a coworker — this is just for you, nothing is graded."],
+  items:["CPR","Severe bleeding","Broken bones & fractures","Burns","Choking","Head injuries/concussions","Cuts & abrasions","Electric shock","Heart attack","Stroke recognition","Moving an injured person","Drug overdose","Unconscious victim","Eye injuries","Chemical burns","Rescue"]});
+
+S.push({part:3, kicker:"Beyond Training", title:"What Else Does Readiness Require?", type:"multi",
+  body:["Training employees in first aid technique is only part of being prepared to administer it."],
+  prompt:"Select every item the chapter says readiness also requires, beyond training itself.",
+  options:[
+    {t:"Postemergency phone numbers posted near every phone, where 911 isn't available", c:true},
+    {t:"Personal protective devices — rubber gloves, face masks, CPR mouthpieces", c:true},
+    {t:"Keeping all employees informed and up to date, however training is structured", c:true},
+    {t:"Well-stocked first aid kits placed in clearly visible, accessible locations", c:true},
+    {t:"Requiring every employee to pass an annual written certification exam", c:false},
+    {t:"Rotating kit-restocking duty among employees on a fixed monthly schedule", c:false},
+  ],
+  explain:"The chapter lists four things beyond training: stocked kits, PPE devices (because of AIDS/hepatitis exposure concerns), posted phone numbers, and keeping everyone informed. Annual exams and restocking rotas aren't mentioned."});
+
+S.push({part:3, kicker:"Who to Call", title:"Red Cross or NSC?", type:"sort",
+  body:["Two organizations provide first aid training resources. Sort each fact to the right one."],
+  buckets:["American Red Cross","National Safety Council"],
+  items:[
+    {t:"Provides training programs geared specifically toward the workplace", b:0},
+    {t:"Reachable at (202) 639-3200", b:0},
+    {t:"Publishes the First Aid and Emergency Care Teaching Package", b:1},
+    {t:"Publishes the book First Aid Essentials", b:1},
+    {t:"Reachable at (800) 832-0034 or nsc.org", b:1},
+  ]});
+
+S.push({part:3, kicker:"Figure 10-5", title:"Kit Check", type:"sort",
+  body:["A workplace first aid kit needs specific contents. Sort each item: does it belong in the kit, or is it not on the recommended list?"],
+  buckets:["Belongs in the kit","Not on the list"],
+  items:[
+    {t:"Sterile gauze dressings", b:0},{t:"Rubber surgical gloves", b:0},{t:"Triangular bandages", b:0},
+    {t:"Face masks / CPR mouthpieces", b:0},{t:"Oral thermometer", b:0},{t:"Flashlight", b:0},
+    {t:"Prescription pain medication", b:1},{t:"A fire extinguisher", b:1},{t:"A hard hat", b:1},
+  ]});
+
+S.push({part:3, kicker:"Figure 10-6", title:"Moving an Injured Person: True or False", type:"truefalse",
+  body:["First Aid Fact Sheet No. 16 covers moving a victim with a possible neck or back injury. Mark each statement true or false."],
+  items:[
+    {t:"You should move a victim with a suspected neck injury right away to get them more comfortable.", a:false, x:"False — don't move them unless it's necessary to prevent additional injury."},
+    {t:"If you must move someone, always pull the body lengthwise, never sideways.", a:true, x:"True."},
+    {t:"If there's time, slip a blanket under the victim to help pull them to safety.", a:true, x:"True."},
+    {t:"If the victim must be lifted, it's fine if the body bends or jack-knifes a little.", a:false, x:"False — support all parts of the body so it does not bend or jack-knife."},
+  ]});
+
+S.push({part:3, kicker:"Figure 10-7", title:"ABCs Scenario", type:"scenario",
+  body:["A fellow employee goes down near a stack of rebar. You're the first person on scene. You remember the ABCs of first aid."],
+  prompt:"What's the very first thing you check?",
+  options:[
+    {t:"A — Airway: is it blocked? Clear it quickly if so.", c:true, x:"Correct order: Airway, then Breathing, then Circulation. Airway comes first because nothing else matters if the victim can't move air."},
+    {t:"B — Breathing: is the victim breathing?", c:false, x:"Breathing is step two — you check the airway first."},
+    {t:"C — Circulation: is the victim bleeding or does a pulse exist?", c:false, x:"Circulation is step three, after airway and breathing."},
+  ]});
+
+/* ---------- PART 4 ---------- */
+S.push({part:4, kicker:"Who Responds", title:"ERT Roles", type:"multi",
+  body:["An emergency response team (ERT) is a special team that responds to general and localized emergencies."],
+  prompt:"Select everything an ERT is responsible for, per the chapter.",
+  options:[
+    {t:"Facilitate personnel evacuation and safety", c:true},
+    {t:"Shut down building services and utilities as needed", c:true},
+    {t:"Work with responding civil authorities", c:true},
+    {t:"Protect and salvage company property", c:true},
+    {t:"Evaluate areas for safety before reentry of personnel", c:true},
+    {t:"Set the company's annual safety training budget", c:false},
+  ],
+  explain:"Budgeting isn't an ERT function — the ERT's job is operational: evacuation, shutdown, coordination with authorities, protecting property, and clearing areas for reentry."});
+
+S.push({part:4, kicker:"Expert Systems", title:"The Forklift Scenario", type:"scenario",
+  body:["A forklift crashes into several barrels of various chemicals. You've trained on certain spills, but not this exact mix — and your 1½-inch-thick printed emergency plan can't keep pace with the moment."],
+  prompt:"What's the modern answer the chapter proposes for exactly this gap?",
+  options:[
+    {t:"Wait for the fire department and do nothing until they arrive", c:false, x:"Waiting without acting isn't the proposed answer — and some response decisions (evacuation, containment) can't wait."},
+    {t:"An expert system — a laptop-accessible program with if-then rules for mixed-chemical emergencies", c:true, x:"Right. An expert system pulls from a knowledge database to recommend PPE, cleanup methods, decontamination, evacuation steps, and more — on demand, for situations a printed binder can't anticipate."},
+    {t:"Guess based on the most similar single-chemical spill you've trained on", c:false, x:"Guessing with an unfamiliar chemical mix is exactly the risk an expert system is built to reduce."},
+  ]});
+
+S.push({part:4, kicker:"Expert Systems", title:"What Can It Actually Tell You?", type:"multi",
+  body:["An expert system pulls from a knowledge database and if-then heuristic rules — like consulting an expert at a terminal. For a chemical emergency specifically, it's built to answer a defined set of questions."],
+  prompt:"Select everything an expert system can actually provide for a chemical emergency, per the chapter.",
+  options:[
+    {t:"Personal protective equipment needed for controlling and cleaning up", c:true},
+    {t:"Methods for cleaning up the spill or toxic release", c:true},
+    {t:"Decontamination procedures", c:true},
+    {t:"Reactions that might result from chemical interaction", c:true},
+    {t:"Impact of weather conditions on the situation", c:true},
+    {t:"Recommended first aid procedures", c:true},
+    {t:"Estimated repair cost of damaged equipment", c:false},
+    {t:"Legal liability exposure for the company", c:false},
+  ],
+  explain:"The real list also includes combustibility of chemicals/materials, evacuation information, and the likelihood employees or the community will be exposed. Repair costs and legal liability aren't part of it — an expert system answers safety and response questions, not financial or legal ones."});
+
+S.push({part:4, kicker:"Case File", title:"Portland, Oregon", type:"scenario",
+  body:["A firm expanded operations without obtaining required federal permits. The EPA and U.S. Justice Department also cited a lack of air-pollution control equipment."],
+  prompt:"What do you think the company ended up paying?",
+  options:[
+    {t:"$93.2 million, the fine amount", c:false, x:"Close — $93.2 million is what the company will spend on environmental upgrades across its four states, on top of the fine itself."},
+    {t:"$11.2 million — the largest fine ever imposed for a Clean Air Act violation at the time", c:true, x:"Correct. And because the company has facilities in four states, it will also spend a total of $93.2 million on environmental upgrades and projects."},
+    {t:"No fine — only a warning letter", c:false, x:"This was treated as a serious violation, not a warning."},
+  ]});
+
+S.push({part:4, kicker:"The Human Cost", title:"Defining Trauma", type:"mcq",
+  body:["Beyond physical injury and property damage, construction professionals must be prepared for psychological damage. Trauma among employees involved in workplace disasters is as common as it is among combat veterans."],
+  prompt:"Per the chapter, what makes an event traumatic?",
+  options:[
+    {t:"It happens on a construction site", c:false, x:"Location isn't the defining feature — the psychological impact is."},
+    {t:"It's so shocking it impairs a person's sense of security, well-being, or reality — typically involving the reality or threat of death", c:true, x:"Correct — that's the chapter's definition of a traumatic event."},
+    {t:"It results in a lost-time injury claim", c:false, x:"A claim is an administrative outcome, not what defines trauma psychologically."},
+  ]});
+
+S.push({part:4, kicker:"Trauma Response Team", title:"Why the Group Approach Works", type:"multi",
+  body:["Response to trauma should begin within 24 hours if possible, 72 hours in all cases. For employees who don't need outside referral, a group approach works well."],
+  prompt:"Select every benefit the chapter credits to the group approach.",
+  options:[
+    {t:"Facilitates public acknowledgment of what employees experienced", c:true},
+    {t:"Keeps employees informed, cutting down on unfounded rumors", c:true},
+    {t:"Encourages employees to express their feelings about the incident", c:true},
+    {t:"Shows employees they aren't alone — reactions like nightmares and flashbacks are normal", c:true},
+    {t:"Replaces the need for any qualified mental health referral", c:false},
+  ],
+  explain:"The group approach is for employees who don't need outside referral — TRT members who aren't counselors should never attempt care they're not qualified to give."});
+
+S.push({part:4, kicker:"Making the Case", title:"Why Early Intervention Matters", type:"multi",
+  body:["Left untreated, psychological trauma can become posttraumatic stress disorder (PTSD) — the same syndrome common among combat veterans. The American Psychiatric Association has included PTSD in its Diagnostic and Statistical Manual since 1980.",
+  "Jeffrey T. Mitchell, president of the American Critical Incident Stress Foundation, likens prevention to working with cement: “Wet cement can be molded, shaped, manipulated, and even washed away. But once it hardens, there is not much one can do with it.”"],
+  prompt:"Select every symptom the chapter lists as characteristic of PTSD.",
+  options:[
+    {t:"Intrusive thoughts and flashbacks of the stressful event", c:true},
+    {t:"The tendency to avoid stimulation", c:true},
+    {t:"Paranoia and concentration difficulties", c:true},
+    {t:"Physiological symptoms such as rapid heartbeat and irritability", c:true},
+    {t:"Permanent memory loss of unrelated events", c:false},
+    {t:"Improved sleep patterns", c:false},
+  ],
+  explain:"Mitchell's wet-cement analogy is the chapter's argument for early intervention — trauma, like wet cement, can still be shaped soon after the event; once it hardens into PTSD, it's far harder to treat."});
+
+/* ---------- FINAL ---------- */
+S.push({kind:"quizfinal", title:"Final Check", kicker:"Before You Clock Out",
+  body:["Six quick ones, pulled from across the chapter. Answer each, then see your score."],
+  items:[
+    {q:"EPCRA's four components are emergency planning, emergency notification, toxic chemical release reporting, and —",
+     options:[{t:"Information requirements",c:true},{t:"Insurance verification",c:false},{t:"Annual audits",c:false}]},
+    {q:"The minimum number of people who should be \"clearly in charge\" during an emergency response is —",
+     options:[{t:"One",c:true},{t:"Three — one per shift",c:false},{t:"As many as are available",c:false}]},
+    {q:"29 CFR 1926.35 EAPs can skip the written requirement only if the company has —",
+     options:[{t:"10 or fewer employees",c:true},{t:"No hazardous materials on site",c:false},{t:"Fewer than 3 job sites",c:false}]},
+    {q:"The \"golden window\" for first aid before delay could cost a life is —",
+     options:[{t:"4–6 minutes",c:true},{t:"30–60 minutes",c:false},{t:"Under 1 minute",c:false}]},
+    {q:"The first letter of the ABCs of first aid stands for —",
+     options:[{t:"Airway",c:true},{t:"Assessment",c:false},{t:"Alarm",c:false}]},
+    {q:"Trauma response should ideally begin within —",
+     options:[{t:"24 hours",c:true},{t:"One week",c:false},{t:"Immediately, or not at all",c:false}]},
+  ]});
+
+S.push({kind:"end"});
+
+/* ---------------------------------------------------------------
+   STATE
+--------------------------------------------------------------- */
+let cur = 0;
+const total = S.length;
+let answered = {}; // index -> {correct, total} for scoring
+let visited = new Set();
+
+function saveProgress(){
+  try{ localStorage.setItem('erd_progress', JSON.stringify({cur, answered})); }catch(e){}
+}
+function loadProgress(){
+  try{
+    const raw = localStorage.getItem('erd_progress');
+    if(raw){ const d = JSON.parse(raw); if(d && typeof d.cur==='number'){ answered = d.answered||{}; } }
+  }catch(e){}
+}
+loadProgress();
+
+/* ---------------------------------------------------------------
+   SCORING
+--------------------------------------------------------------- */
+function totalScore(){
+  let got=0, poss=0;
+  Object.values(answered).forEach(a=>{ got+=a.correct; poss+=a.total; });
+  return {got, poss};
+}
+function updateScorePill(){
+  const {got,poss} = totalScore();
+  document.getElementById('scoreText').textContent = poss? (got+' / '+poss) : '0 / 0';
+}
+
+/* ---------------------------------------------------------------
+   RAIL
+--------------------------------------------------------------- */
+function buildRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  S.forEach((s,i)=>{
+    if(s.kind==='start'||s.kind==='end') return;
+    const b = document.createElement('button');
+    b.className='tick'+(visited.has(i)?' visited':'')+(i===cur?' current':'');
+    b.dataset.part = s.part || (s.kind==='quizfinal'?4:1);
+    b.title = s.title||'';
+    b.addEventListener('click',()=>goto(i));
+    rail.appendChild(b);
+  });
+}
+
+/* ---------------------------------------------------------------
+   RENDER HELPERS
+--------------------------------------------------------------- */
+function el(tag,cls,html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!==undefined)e.innerHTML=html; return e; }
+
+function renderBody(container, bodyArr){
+  (bodyArr||[]).forEach(p=>{
+    container.appendChild(el('p','body-text',p));
+  });
+}
+
+/* ---------- MCQ / SCENARIO ---------- */
+function renderMCQ(stage, s, idx){
+  const card = el('div','card');
+  card.appendChild(el('div','kicker', s.kicker));
+  card.appendChild(el('h2','title', s.title));
+  renderBody(card, s.body);
+  if(s.statline) card.appendChild(el('div','statline', s.statline));
+  const w = el('div','widget');
+  w.appendChild(el('div','prompt', s.prompt));
+  const list = el('div','opt-list');
+  const fb = el('div','feedback');
+  let locked=false;
+  s.options.forEach((o,oi)=>{
+    const b=document.createElement('button');
+    b.className='opt radio'; b.type='button';
+    b.innerHTML='<span class="box"></span><span>'+o.t+'</span>';
+    b.addEventListener('click',()=>{
+      if(locked) return; locked=true;
+      [...list.children].forEach((c,ci)=>{
+        c.disabled=true; c.classList.add('locked');
+        if(s.options[ci].c) c.classList.add('correct');
+      });
+      if(!o.c) b.classList.add('incorrect');
+      fb.className='feedback show '+(o.c?'good':'bad');
+      const correctOpt = s.options.find(x=>x.c);
+      fb.innerHTML = (o.c? '<b>Correct.</b> ' : '<b>Not quite.</b> ') + (o.x || correctOpt.x || '');
+      recordAnswer(idx, o.c?1:0, 1);
+    });
+    list.appendChild(b);
+  });
+  w.appendChild(list); w.appendChild(fb);
+  card.appendChild(w);
+  stage.appendChild(card);
+}
+
+/* ---------- MULTI (select all) ---------- */
+function renderMulti(stage, s, idx){
+  const card = el('div','card');
+  card.appendChild(el('div','kicker', s.kicker));
+  card.appendChild(el('h2','title', s.title));
+  renderBody(card, s.body);
+  const w = el('div','widget');
+  w.appendChild(el('div','prompt', s.prompt));
+  const list = el('div','opt-list');
+  const fb = el('div','feedback');
+  const btns=[];
+  let checked=false;
+  const state = s.options.map(()=>false);
+  s.options.forEach((o,oi)=>{
+    const b=document.createElement('button');
+    b.className='opt'; b.type='button';
+    b.innerHTML='<span class="box"></span><span>'+o.t+'</span>';
+    b.addEventListener('click',()=>{
+      if(checked) return;
+      state[oi]=!state[oi];
+      b.querySelector('.box').textContent = state[oi]?'✓':'';
+      b.classList.toggle('sel', state[oi]);
+    });
+    btns.push(b); list.appendChild(b);
+  });
+  const checkBtn = document.createElement('button');
+  checkBtn.className='nbtn primary'; checkBtn.style.marginTop='12px'; checkBtn.textContent='Check answers';
+  checkBtn.addEventListener('click',()=>{
+    if(checked) return; checked=true;
+    let correct=0, total=s.options.length;
+    btns.forEach((b,oi)=>{
+      b.disabled=true; b.classList.add('locked');
+      const should = s.options[oi].c;
+      if(should===state[oi]) correct++;
+      if(should) b.classList.add('correct');
+      else if(state[oi]) b.classList.add('incorrect');
+    });
+    fb.className='feedback show '+(correct===total?'good':'bad');
+    fb.innerHTML = '<b>'+correct+' / '+total+' correct.</b> '+(s.explain||'');
+    recordAnswer(idx, correct, total);
+    checkBtn.remove();
+  });
+  w.appendChild(list); w.appendChild(checkBtn); w.appendChild(fb);
+  card.appendChild(w);
+  stage.appendChild(card);
+}
+
+/* ---------- MATCH ---------- */
+function renderMatch(stage, s, idx){
+  const card = el('div','card');
+  card.appendChild(el('div','kicker', s.kicker));
+  card.appendChild(el('h2','title', s.title));
+  renderBody(card, s.body);
+  const w = el('div','widget');
+  const grid = el('div','match-grid');
+  const leftCol = el('div'); leftCol.appendChild(el('div','match-col-label','Term'));
+  const rightCol = el('div'); rightCol.appendChild(el('div','match-col-label','Definition'));
+  const order = s.pairs.map((_,i)=>i);
+  // shuffle right side order
+  const rightOrder = [...order].sort(()=>Math.random()-0.5);
+  let selLeft=null, selRight=null, pairedCount=0;
+  const leftEls=[], rightEls=[];
+  const fb = el('div','feedback');
+
+  function tryPair(){
+    if(selLeft===null||selRight===null) return;
+    const lBtn=leftEls[selLeft], rBtn=rightEls.find(r=>r.dataset.idx==selRight);
+    if(selLeft===selRight){
+      lBtn.classList.remove('sel'); rBtn.classList.remove('sel');
+      lBtn.classList.add('paired'); rBtn.classList.add('paired');
+      lBtn.disabled=true; rBtn.disabled=true;
+      pairedCount++;
+      if(pairedCount===s.pairs.length){
+        fb.className='feedback show good';
+        fb.innerHTML='<b>All matched.</b> Nice work.';
+        recordAnswer(idx, s.pairs.length, s.pairs.length);
+      }
+    } else {
+      lBtn.classList.add('wrong-flash'); rBtn.classList.add('wrong-flash');
+      setTimeout(()=>{
+        lBtn.classList.remove('sel','wrong-flash'); rBtn.classList.remove('sel','wrong-flash');
+      },420);
+    }
+    selLeft=null; selRight=null;
+  }
+
+  s.pairs.forEach((p,i)=>{
+    const b=document.createElement('button'); b.className='match-item'; b.textContent=p.l; b.dataset.idx=i;
+    b.addEventListener('click',()=>{
+      if(b.classList.contains('paired'))return;
+      leftEls.forEach(x=>x.classList.remove('sel'));
+      b.classList.add('sel'); selLeft=i; tryPair();
+    });
+    leftEls.push(b); leftCol.appendChild(b);
+  });
+  rightOrder.forEach(i=>{
+    const p=s.pairs[i];
+    const b=document.createElement('button'); b.className='match-item'; b.textContent=p.r; b.dataset.idx=i;
+    b.addEventListener('click',()=>{
+      if(b.classList.contains('paired'))return;
+      rightEls.forEach(x=>x.classList.remove('sel'));
+      b.classList.add('sel'); selRight=i; tryPair();
+    });
+    rightEls.push(b); rightCol.appendChild(b);
+  });
+  grid.appendChild(leftCol); grid.appendChild(rightCol);
+  w.appendChild(grid); w.appendChild(fb);
+  card.appendChild(w);
+  stage.appendChild(card);
+}
+
+/* ---------- SORT ---------- */
+function renderSort(stage, s, idx){
+  const card = el('div','card');
+  card.appendChild(el('div','kicker', s.kicker));
+  card.appendChild(el('h2','title', s.title));
+  renderBody(card, s.body);
+  const w = el('div','widget');
+  const pool = el('div','sort-pool');
+  const buckets = el('div','sort-buckets');
+  const bucketEls = s.buckets.map(name=>{
+    const d = el('div','bucket');
+    d.appendChild(el('div','bucket-label', name));
+    const inner = el('div'); d.appendChild(inner);
+    buckets.appendChild(d);
+    return inner;
+  });
+  const shuffled = s.items.map((it,i)=>({...it,i})).sort(()=>Math.random()-0.5);
+  let placed=0, correctCount=0;
+  const chips=[];
+  let activeChoice=null;
+  shuffled.forEach(item=>{
+    const chip = el('button','sort-chip', item.t);
+    chip.type='button';
+    chip.addEventListener('click',()=>{
+      if(chip.classList.contains('gone'))return;
+      chips.forEach(c=>c.style.outline='');
+      chip.style.outline='2px solid var(--accent)';
+      activeChoice=chip;
+      openBucketPicker();
+    });
+    chip._item=item;
+    chips.push(chip); pool.appendChild(chip);
+  });
+  function openBucketPicker(){
+    // simple: clicking a bucket after selecting a chip places it there
+  }
+  bucketEls.forEach((inner, bi)=>{
+    inner.parentElement.addEventListener('click',(ev)=>{
+      if(!activeChoice) return;
+      const item = activeChoice._item;
+      const right = item.b===bi;
+      const tag = el('span','placed '+(right?'right':'wrong'), item.t+(right?' ✓':' ✗'));
+      inner.appendChild(tag);
+      activeChoice.classList.add('gone');
+      activeChoice=null; placed++;
+      if(right) correctCount++;
+      if(placed===shuffled.length){
+        recordAnswer(idx, correctCount, shuffled.length);
+        const fb=el('div','feedback show '+(correctCount===shuffled.length?'good':'bad'),
+          '<b>'+correctCount+' / '+shuffled.length+' correct.</b>');
+        w.appendChild(fb);
+      }
+    });
+  });
+  w.appendChild(el('div','prompt','Tap an item, then tap the bucket it belongs in.'));
+  w.appendChild(pool); w.appendChild(buckets);
+  card.appendChild(w);
+  stage.appendChild(card);
+}
+
+/* ---------- SEQUENCE ---------- */
+function renderSequence(stage, s, idx){
+  const card = el('div','card');
+  card.appendChild(el('div','kicker', s.kicker));
+  card.appendChild(el('h2','title', s.title));
+  renderBody(card, s.body);
+  const w = el('div','widget');
+  let order = s.items.map((_,i)=>i).sort(()=>Math.random()-0.5);
+  const list = el('div','seq-list');
+  const fb = el('div','feedback');
+  function render(){
+    list.innerHTML='';
+    order.forEach((itemIdx,pos)=>{
+      const row = el('div','seq-item');
+      row.appendChild(el('span','seq-num',(pos+1)+'.'));
+      row.appendChild(el('span','',s.items[itemIdx]));
+      const btns = el('div','seq-btns');
+      const up = document.createElement('button'); up.textContent='↑'; up.type='button';
+      up.disabled = pos===0;
+      up.addEventListener('click',()=>{ [order[pos-1],order[pos]]=[order[pos],order[pos-1]]; render(); });
+      const down = document.createElement('button'); down.textContent='↓'; down.type='button';
+      down.disabled = pos===order.length-1;
+      down.addEventListener('click',()=>{ [order[pos+1],order[pos]]=[order[pos],order[pos+1]]; render(); });
+      btns.appendChild(up); btns.appendChild(down);
+      row.appendChild(btns);
+      list.appendChild(row);
+    });
+  }
+  render();
+  const checkBtn = document.createElement('button');
+  checkBtn.className='nbtn primary'; checkBtn.style.marginTop='12px'; checkBtn.textContent='Check order';
+  checkBtn.addEventListener('click',()=>{
+    const right = order.every((v,i)=>v===s.correctOrder[i]);
+    fb.className='feedback show '+(right?'good':'bad');
+    fb.innerHTML = right? '<b>That\'s the cycle.</b> '+(s.explain||'') : '<b>Not quite the order.</b> '+(s.explain||'');
+    recordAnswer(idx, right?1:0, 1);
+    checkBtn.disabled=true;
+  });
+  w.appendChild(list); w.appendChild(checkBtn); w.appendChild(fb);
+  card.appendChild(w);
+  stage.appendChild(card);
+}
+
+/* ---------- TRUE/FALSE GROUP ---------- */
+function renderTrueFalse(stage, s, idx){
+  const card = el('div','card');
+  card.appendChild(el('div','kicker', s.kicker));
+  card.appendChild(el('h2','title', s.title));
+  renderBody(card, s.body);
+  const w = el('div','widget');
+  let correct=0, answeredCount=0;
+  s.items.forEach(item=>{
+    const row = el('div','qf-item');
+    row.appendChild(el('div','prompt',item.t));
+    const btnrow = el('div','opt-list');
+    const fb = el('div','feedback');
+    ['True','False'].forEach(label=>{
+      const val = label==='True';
+      const b=document.createElement('button'); b.className='opt'; b.type='button'; b.textContent=label;
+      b.addEventListener('click',()=>{
+        if(row.dataset.done) return; row.dataset.done='1'; answeredCount++;
+        const right = val===item.a;
+        b.classList.add(right?'correct':'incorrect');
+        [...btnrow.children].forEach(c=>c.disabled=true);
+        if(right) correct++;
+        fb.className='feedback show '+(right?'good':'bad');
+        fb.innerHTML=(right?'<b>Correct.</b> ':'<b>Not quite.</b> ')+item.x;
+        if(answeredCount===s.items.length) recordAnswer(idx, correct, s.items.length);
+      });
+      btnrow.appendChild(b);
+    });
+    row.appendChild(btnrow); row.appendChild(fb);
+    w.appendChild(row);
+  });
+  card.appendChild(w);
+  stage.appendChild(card);
+}
+
+/* ---------- CHECKLIST (self assess, not scored) ---------- */
+function renderChecklist(stage, s, idx){
+  const card = el('div','card');
+  card.appendChild(el('div','kicker', s.kicker));
+  card.appendChild(el('h2','title', s.title));
+  renderBody(card, s.body);
+  const w = el('div','widget');
+  s.items.forEach(t=>{
+    const row = el('div','chk-row');
+    const box = el('div','chk-box');
+    box.addEventListener('click',()=>box.classList.toggle('on'), {passive:true});
+    box.addEventListener('click',()=>{ box.textContent = box.classList.contains('on')?'✓':''; });
+    row.appendChild(box); row.appendChild(el('div','',t));
+    w.appendChild(row);
+  });
+  card.appendChild(w);
+  stage.appendChild(card);
+}
+
+/* ---------- QUIZ FINAL ---------- */
+function renderQuizFinal(stage, s, idx){
+  const card = el('div','card');
+  card.appendChild(el('div','kicker', s.kicker));
+  card.appendChild(el('h2','title', s.title));
+  renderBody(card, s.body);
+  let correct=0;
+  s.items.forEach((q,qi)=>{
+    const row = el('div','qf-item');
+    row.appendChild(el('div','prompt',(qi+1)+'. '+q.q));
+    const list = el('div','opt-list');
+    let locked=false;
+    q.options.forEach(o=>{
+      const b=document.createElement('button'); b.className='opt radio'; b.type='button';
+      b.innerHTML='<span class="box"></span><span>'+o.t+'</span>';
+      b.addEventListener('click',()=>{
+        if(locked)return; locked=true;
+        [...list.children].forEach((c,ci)=>{ c.disabled=true; c.classList.add('locked'); if(q.options[ci].c)c.classList.add('correct'); });
+        if(!o.c) b.classList.add('incorrect'); else correct++;
+        if([...list.children].every(c=>c.disabled) && qi===s.items.length-1){
+          setTimeout(()=>showRing(),250);
+        }
+        checkDone();
+      });
+      list.appendChild(b);
+    });
+    row.appendChild(list);
+    card.appendChild(row);
+  });
+  const ringWrap = el('div'); ringWrap.style.marginTop='18px'; ringWrap.style.display='none';
+  card.appendChild(ringWrap);
+  stage.appendChild(card);
+
+  let doneCount=0;
+  function checkDone(){ doneCount++; }
+  function showRing(){
+    const pct = Math.round(correct/s.items.length*100);
+    ringWrap.style.display='block';
+    ringWrap.innerHTML = '<div class="qf-score-ring" style="--pct:'+pct+'"><span>'+correct+'/'+s.items.length+'<small>SCORE</small></span></div>'+
+      '<p class="body-text" style="text-align:center">'+scoreMessage(pct)+'</p>';
+    recordAnswer(idx, correct, s.items.length);
+  }
+  function scoreMessage(pct){
+    if(pct>=85) return 'Foreman-ready. You\'ve got this chapter down.';
+    if(pct>=60) return 'Solid. A quick pass back through the rail will tighten the rest up.';
+    return 'Worth a second lap — jump back to any station from the rail up top.';
+  }
+}
+
+/* ---------- START / END ---------- */
+function renderStart(stage){
+  const hero = el('div','hero');
+  hero.innerHTML = '<div class="tag">Chapter 10 · Interactive Review</div><h1>Emergency Response: The Drill</h1>'+
+    '<p>'+STATION_IDX.length+' stations. Match the EPCRA components, sort EAP requirements, run the ABCs on a scenario, and see where two real companies paid for skipping the plan. No lecture — just the chapter, worked.</p>';
+  const grid = el('div','part-grid');
+  Object.entries(PARTS).forEach(([n,t])=>{
+    grid.appendChild(el('div','part-card','<div class="n">PART 0'+n+'</div><div class="t">'+t+'</div>'));
+  });
+  hero.appendChild(grid);
+  const startBtn = el('button','bigstart','Start the drill →');
+  startBtn.style.marginTop='24px';
+  startBtn.addEventListener('click',()=>goto(1));
+  hero.appendChild(document.createElement('br'));
+  hero.appendChild(startBtn);
+  stage.appendChild(hero);
+}
+function renderEnd(stage){
+  const {got,poss} = totalScore();
+  const hero = el('div','hero');
+  hero.innerHTML = '<div class="tag">Shift Complete</div><h1>That\'s the Chapter</h1>'+
+    '<p>Your running score across every graded station: <b class="mono">'+got+' / '+poss+'</b>. Jump back to any station on the rail to review, or close this out.</p>';
+  const again = el('button','bigstart','Review from the top ↺');
+  again.addEventListener('click',()=>goto(1));
+  hero.appendChild(again);
+  stage.appendChild(hero);
+}
+
+/* ---------------------------------------------------------------
+   RECORD / NAV
+--------------------------------------------------------------- */
+function recordAnswer(idx, correct, total){
+  answered[idx] = {correct, total};
+  updateScorePill();
+  saveProgress();
+  const ticks = document.querySelectorAll('.tick');
+  // no-op visual beyond visited state; kept simple/robust
+}
+
+function render(){
+  const stage = document.getElementById('stage');
+  stage.innerHTML = '';
+  const s = S[cur];
+  visited.add(cur);
+  if(s.kind==='start') renderStart(stage);
+  else if(s.kind==='end') renderEnd(stage);
+  else if(s.kind==='quizfinal') renderQuizFinal(stage, s, cur);
+  else if(s.type==='mcq' || s.type==='scenario') renderMCQ(stage, s, cur);
+  else if(s.type==='multi') renderMulti(stage, s, cur);
+  else if(s.type==='match') renderMatch(stage, s, cur);
+  else if(s.type==='sort') renderSort(stage, s, cur);
+  else if(s.type==='sequence') renderSequence(stage, s, cur);
+  else if(s.type==='truefalse') renderTrueFalse(stage, s, cur);
+  else if(s.type==='checklist') renderChecklist(stage, s, cur);
+  window.scrollTo({top:0, behavior:'instant'});
+  buildRail();
+  updateScorePill();
+  updateNav();
+}
+
+const STATION_IDX = S.map((s,i)=> (s.kind==='start'||s.kind==='end') ? null : i).filter(i=>i!==null);
+function updateNav(){
+  const backBtn=document.getElementById('btnBack'), nextBtn=document.getElementById('btnNext'), mid=document.getElementById('navMid');
+  backBtn.disabled = cur===0;
+  nextBtn.textContent = cur===total-1 ? 'Done' : (cur===total-2? 'Finish →' : (cur===total-3? 'See final check →' : 'Next →'));
+  nextBtn.disabled = cur===total-1;
+  if(cur===0) mid.textContent='Start';
+  else if(cur===total-1) mid.textContent='End';
+  else mid.textContent = 'Station '+(STATION_IDX.indexOf(cur)+1)+' / '+STATION_IDX.length;
+}
+
+function goto(i){
+  cur = Math.max(0, Math.min(total-1, i));
+  render();
+}
+document.getElementById('btnBack').addEventListener('click',()=>goto(cur-1));
+document.getElementById('btnNext').addEventListener('click',()=>goto(cur+1));
+
+gateInit();
+render();
+
+/* hot-update hook: preserve position for already-open viewers */
+try{
+  if(window.claude && window.claude.hot){
+    window.claude.hot.snapshot(()=>({cur, answered}));
+    const boot = (data)=>{
+      if(data && typeof data.cur==='number'){ cur=data.cur; answered=data.answered||{}; }
+      render();
+    };
+    if(window.claude.hot.ready) window.claude.hot.ready(boot); else boot(window.claude.hot.data||{});
+  }
+}catch(e){}
+
+})();
+</script>
+</body>
+</html>
